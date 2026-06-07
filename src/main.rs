@@ -62,19 +62,23 @@ fn is_get_request(buf: &[u8]) -> Result<bool, Utf8Error> {
     }
 }
 
-fn parse_request_target(buf: &[u8]) -> Result<(), std::str::FromUtf8Error> {
+fn parse_request_target(buf: &[u8]) -> Result<(), FromUtf8Error> {
     //the bytes that the buffer returns may or may not actually be text all the time
     //let actual_string = std::str::from_utf8(buf)?;
     //don't make a habit of converting everything to text
     //
     //
     //
+    //
+    //
+    let request_str = str::from_utf8(buf);
+    println!("{:?}", buf);
 
     //now convert the buffer into ut8f text
     //at first just take a view into the u8 vec and borrow it using a byte slice
     //this avoids having to allocate a string or convert way too early and pass it around
 
-    return Ok(());
+    Ok(())
 }
 fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), ClientError> {
     println!("{:?}", stream);
@@ -92,12 +96,25 @@ fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), Clien
     }
 
     if is_get_request(&buf[..amt_bytes])? {
-        parse_request_target(&buf[..amt_bytes]?);
+        let _ = parse_request_target(&buf);
     }
     //implement from trait for Utf8Error to ClientError
     //you cannot use ? because it implicitly tries to cast utf8 error to client error
 
-    let response = "HTTP/1.1 200 OK\r\n\r\n";
+    let response = "HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: 173
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>My Rust HTTP Server</title>
+  </head>
+  <body>
+    <h1>Hello from Rust!</h1>
+    <p>This page was served by my HTTP server.</p>
+  </body>
+</html>";
     let response404 = "HTTP/1.1 404 Not Found\r\n\r\n";
 
     owned_stream.write_all(response.as_bytes())?;
