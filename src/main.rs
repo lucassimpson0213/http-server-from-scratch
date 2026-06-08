@@ -37,12 +37,13 @@ impl From<FromUtf8Error> for ClientError {
     }
 }
 
-impl From<Utf8Error> for ClientError {
+impl From<std::str::Utf8Error> for ClientError {
     fn from(error: Utf8Error) -> ClientError {
         let _ = error;
         ClientError::StringConversion
     }
 }
+
 enum ClientError {
     TcpStreamRead(BufferError),
     Io,
@@ -62,7 +63,7 @@ fn is_get_request(buf: &[u8]) -> Result<bool, Utf8Error> {
     }
 }
 
-fn parse_request_target(buf: &[u8]) -> Result<(), FromUtf8Error> {
+fn parse_request_target(buf: &[u8]) -> Result<(), Utf8Error> {
     //the bytes that the buffer returns may or may not actually be text all the time
     //let actual_string = std::str::from_utf8(buf)?;
     //don't make a habit of converting everything to text
@@ -71,8 +72,20 @@ fn parse_request_target(buf: &[u8]) -> Result<(), FromUtf8Error> {
     //
     //
     //
-    let request_str = str::from_utf8(buf);
-    println!("{:?}", buf);
+    let request_str = str::from_utf8(buf)?;
+    let index_of_start_req = str::find(request_str, "/");
+
+    let request_line = vec![];
+
+    if let Some(index) = index_of_start_req {
+        for item in index..request_str.len() {
+            if request_str.as_bytes()[item] == b' ' {
+                let _ = std::ops::ControlFlow::Break::<&str, ()>("we found all the request lines");
+            } else {
+                request_line.to_string().push(request_str.as_bytes()[item]);
+            }
+        }
+    }
 
     //now convert the buffer into ut8f text
     //at first just take a view into the u8 vec and borrow it using a byte slice
