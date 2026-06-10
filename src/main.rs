@@ -15,8 +15,7 @@ use std::{
 fn main() {
     println!("hello");
 
-    let val = bind_port();
-    println!("{:?}", val);
+    let _ = bind_port();
 }
 
 enum BufferError {
@@ -75,17 +74,28 @@ fn parse_request_target(buf: &[u8]) -> Result<(), Utf8Error> {
     let request_str = str::from_utf8(buf)?;
     let index_of_start_req = str::find(request_str, "/");
 
-    let request_line = vec![];
+    let mut request_line = vec![];
 
     if let Some(index) = index_of_start_req {
         for item in index..request_str.len() {
             if request_str.as_bytes()[item] == b' ' {
-                let _ = std::ops::ControlFlow::Break::<&str, ()>("we found all the request lines");
+                println!("we are indeed breaking");
+                break;
             } else {
-                request_line.to_string().push(request_str.as_bytes()[item]);
+                request_line.push(request_str.as_bytes()[item]);
+                continue;
             }
         }
     }
+
+    //convert bytes of u8 vector into a string for display
+    let request_line_str = str::from_utf8(&request_line);
+
+    //print request line as a string
+    request_line_str.iter().for_each(|element| {
+        println!("printing inside of loop");
+        println!("{:?}", element);
+    });
 
     //now convert the buffer into ut8f text
     //at first just take a view into the u8 vec and borrow it using a byte slice
@@ -94,8 +104,6 @@ fn parse_request_target(buf: &[u8]) -> Result<(), Utf8Error> {
     Ok(())
 }
 fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), ClientError> {
-    println!("{:?}", stream);
-
     let mut owned_stream = stream;
     let mut buf: Vec<u8> = vec![0u8; 16834];
 
@@ -150,4 +158,14 @@ fn bind_port() -> Result<(), std::io::Error> {
     }
 
     Ok(())
+}
+
+pub mod tests {
+    use crate::parse_request_target;
+
+    pub struct TestingBuf {}
+    #[test]
+    pub fn return_request_line() {
+        parse_request_target(buf);
+    }
 }
