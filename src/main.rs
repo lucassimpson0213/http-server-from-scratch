@@ -1,4 +1,3 @@
-#![deny(warnings)]
 #![deny(clippy::all)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
@@ -12,8 +11,10 @@ use std::{
     net::{TcpListener, TcpStream},
     string::FromUtf8Error,
 };
+
+//TODO make a test script using curl localhost:4221/abcsad
 fn main() {
-    println!("hello");
+    //println!("hello");
 
     let _ = bind_port();
 }
@@ -54,7 +55,7 @@ fn is_get_request(buf: &[u8]) -> Result<bool, Utf8Error> {
     // -- of String::from_utf8 because that would consume the buffer and use the underlying vec8
     // -- we need to preserve the vec for further consumption??
     let request_str = str::from_utf8(buf)?;
-
+    //parse request target here and return differing response.
     if request_str.contains("GET") {
         Ok(true)
     } else {
@@ -62,7 +63,7 @@ fn is_get_request(buf: &[u8]) -> Result<bool, Utf8Error> {
     }
 }
 
-fn parse_request_target(buf: &[u8]) -> Result<(), Utf8Error> {
+fn parse_request_target(buf: &[u8]) -> Result<Vec<u8>, Utf8Error> {
     //the bytes that the buffer returns may or may not actually be text all the time
     //let actual_string = std::str::from_utf8(buf)?;
     //don't make a habit of converting everything to text
@@ -79,7 +80,7 @@ fn parse_request_target(buf: &[u8]) -> Result<(), Utf8Error> {
     if let Some(index) = index_of_start_req {
         for item in index..request_str.len() {
             if request_str.as_bytes()[item] == b' ' {
-                println!("we are indeed breaking");
+                //println!("we are indeed breaking");
                 break;
             } else {
                 request_line.push(request_str.as_bytes()[item]);
@@ -93,15 +94,15 @@ fn parse_request_target(buf: &[u8]) -> Result<(), Utf8Error> {
 
     //print request line as a string
     request_line_str.iter().for_each(|element| {
-        println!("printing inside of loop");
-        println!("{:?}", element);
+        // println!("printing inside of loop");
+        // println!("{:?}", element);
     });
 
     //now convert the buffer into ut8f text
     //at first just take a view into the u8 vec and borrow it using a byte slice
     //this avoids having to allocate a string or convert way too early and pass it around
 
-    Ok(())
+    Ok(request_line.clone())
 }
 fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), ClientError> {
     let mut owned_stream = stream;
@@ -117,29 +118,27 @@ fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), Clien
     }
 
     if is_get_request(&buf[..amt_bytes])? {
-        let _ = parse_request_target(&buf);
+        let target = parse_request_target(&buf)?;
+
+        let response = "HTTP/1.1 200 OK\r\n\r\n";
+        let response404 = "HTTP/1.1 404 Not Found\r\n\r\n";
+
+        if str::from_utf8(&target.clone())? == "/" {
+            owned_stream.write_all(response.as_bytes())?;
+        } else if str::from_utf8(&target)?.starts_with("/echo/") {
+
+            //good example of what you want to return here
+            //HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc
+
+            //gotta parse the content and include it as the body though
+        } else {
+            owned_stream.write_all(response404.as_bytes())?;
+        }
+    } else {
+        println!("033[31;43mWarning!\033[0m")
     }
     //implement from trait for Utf8Error to ClientError
     //you cannot use ? because it implicitly tries to cast utf8 error to client error
-
-    let response = "HTTP/1.1 200 OK
-Content-Type: text/html
-Content-Length: 173
-
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>My Rust HTTP Server</title>
-  </head>
-  <body>
-    <h1>Hello from Rust!</h1>
-    <p>This page was served by my HTTP server.</p>
-  </body>
-</html>";
-    let response404 = "HTTP/1.1 404 Not Found\r\n\r\n";
-
-    owned_stream.write_all(response.as_bytes())?;
-    owned_stream.write_all(response404.as_bytes())?;
 
     //read_exact or maybe another method that chunks each section that points to the beginning of
     //the section
@@ -163,9 +162,19 @@ fn bind_port() -> Result<(), std::io::Error> {
 pub mod tests {
     use crate::parse_request_target;
 
-    pub struct TestingBuf {}
+    pub struct TestingBuf {
+        request_line: &'static str,
+    }
     #[test]
-    pub fn return_request_line() {
-        parse_request_target(buf);
+    pub fn return_request_line() -> Result<(), std::str::Utf8Error> {
+        let test_struct = crate::tests::TestingBuf {
+            request_line: "GET /index.html HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n",
+        };
+
+        let target = parse_request_target(test_struct.request_line.as_bytes())?;
+
+        assert_eq!(std::str::from_utf8(&target), Ok("/index.html"));
+
+        Ok(())
     }
 }
