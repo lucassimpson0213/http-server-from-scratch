@@ -104,6 +104,15 @@ fn parse_request_target(buf: &[u8]) -> Result<Vec<u8>, Utf8Error> {
 
     Ok(request_line.clone())
 }
+fn parse_content_len_and_string(target: &str) -> (i32, i32) {
+    let last_slash_idx = target.rfind("/");
+
+    let mut stack = Vec::new();
+    return (0, 0);
+}
+fn parse_content_string() {
+    todo!();
+}
 fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), ClientError> {
     let mut owned_stream = stream;
     let mut buf: Vec<u8> = vec![0u8; 16834];
@@ -123,12 +132,20 @@ fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), Clien
         let response = "HTTP/1.1 200 OK\r\n\r\n";
         let response404 = "HTTP/1.1 404 Not Found\r\n\r\n";
 
+        let (len, str) = parse_content_len_and_string(target.clone());
+
+        let response_echo = format!(
+            "HTTP/1.1 200 Ok\r\nContent-Type: text/plain\r\nContent-Length: {:?}\r\n\r{:?}",
+            content_length, content_string
+        );
+
         if str::from_utf8(&target.clone())? == "/" {
             owned_stream.write_all(response.as_bytes())?;
         } else if str::from_utf8(&target)?.starts_with("/echo/") {
-
             //good example of what you want to return here
             //HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc
+            //
+            let _response = owned_stream.write_all(&response_echo.into_bytes());
 
             //gotta parse the content and include it as the body though
         } else {
