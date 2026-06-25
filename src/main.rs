@@ -7,6 +7,8 @@
 #![deny(unsafe_code)]
 use core::str::Utf8Error;
 use std::{
+    error::Error,
+    i32,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     string::FromUtf8Error,
@@ -48,6 +50,7 @@ enum ClientError {
     TcpStreamRead(BufferError),
     Io,
     StringConversion,
+    RequestLineParsing,
 }
 
 fn is_get_request(buf: &[u8]) -> Result<bool, Utf8Error> {
@@ -104,11 +107,30 @@ fn parse_request_target(buf: &[u8]) -> Result<Vec<u8>, Utf8Error> {
 
     Ok(request_line.clone())
 }
-fn parse_content_len_and_string(target: &str) -> (i32, i32) {
-    let last_slash_idx = target.rfind("/");
 
-    let mut stack = Vec::new();
-    return (0, 0);
+fn parse_content_len_and_string(target: &[u8]) -> Result<(i32, i32), ClientError> {
+    let first_space = target.iter().position(|&b| b == b' ');
+
+    /*
+     *
+     *  use let else instead of verbose match here
+     *   let Some(value) = optional_val else {
+     *        return; // Failure case (must diverge)
+     *  };
+     *
+     */
+
+    let Some(space_idx) = first_space else {
+        return Err(ClientError::RequestLineParsing);
+    };
+
+    let second_space = target.iter().skip(space_idx).position(|&b| b == b' ');
+
+    let Some(space_idx2) = second_space else {
+        return Err(ClientError::RequestLineParsing);
+    };
+
+    Ok((0, 0))
 }
 fn parse_content_string() {
     todo!();
@@ -131,8 +153,7 @@ fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), Clien
 
         let response = "HTTP/1.1 200 OK\r\n\r\n";
         let response404 = "HTTP/1.1 404 Not Found\r\n\r\n";
-
-        let (len, str) = parse_content_len_and_string(target.clone());
+        let (len, str) = parse_content_len_and_string(target.clone().bytes());
 
         let response_echo = format!(
             "HTTP/1.1 200 Ok\r\nContent-Type: text/plain\r\nContent-Length: {:?}\r\n\r{:?}",
