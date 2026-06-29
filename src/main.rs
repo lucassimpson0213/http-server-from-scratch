@@ -18,9 +18,10 @@ use std::{
 fn main() {
     //println!("hello");
 
-    let _ = bind_port();
+    let hello = bind_port();
 }
 
+#[derive(Debug)]
 enum BufferError {
     TooManyBytesRead,
 }
@@ -45,12 +46,19 @@ impl From<std::str::Utf8Error> for ClientError {
         ClientError::StringConversion
     }
 }
-
+#[derive(Debug)]
 enum ClientError {
     TcpStreamRead(BufferError),
     Io,
     StringConversion,
-    RequestLineParsing,
+    RequestLineError(RequestLineError),
+}
+
+#[derive(Debug)]
+enum RequestLineError {
+    SpaceParsing,
+    SlashParsing,
+    InvalidRange,
 }
 
 fn is_get_request(buf: &[u8]) -> Result<bool, Utf8Error> {
@@ -107,10 +115,9 @@ fn parse_request_target(buf: &[u8]) -> Result<Vec<u8>, Utf8Error> {
 
     Ok(request_line.clone())
 }
-
-fn parse_content_len_and_string(target: &[u8]) -> Result<(i32, i32), ClientError> {
+fn parse_content_len_and_string(target: &[u8]) -> Result<(usize, &str), ClientError> {
     let first_space = target.iter().position(|&b| b == b' ');
-
+    let first_slash = target.iter().position(|&b| b == b'/');
     /*
      *
      *  use let else instead of verbose match here
@@ -121,16 +128,41 @@ fn parse_content_len_and_string(target: &[u8]) -> Result<(i32, i32), ClientError
      */
 
     let Some(space_idx) = first_space else {
-        return Err(ClientError::RequestLineParsing);
+        return Err(ClientError::RequestLineError(
+            RequestLineError::SpaceParsing,
+        ));
+    };
+
+    let Some(slash_idx) = first_slash else {
+        return Err(ClientError::RequestLineError(
+            RequestLineError::SlashParsing,
+        ));
     };
 
     let second_space = target.iter().skip(space_idx).position(|&b| b == b' ');
 
     let Some(space_idx2) = second_space else {
-        return Err(ClientError::RequestLineParsing);
+        return Err(ClientError::RequestLineError(
+            RequestLineError::SpaceParsing,
+        ));
     };
 
-    Ok((0, 0))
+    let second_slash = target.iter().skip(slash_idx).position(|&b| b == b'/');
+
+    let Some(slash_idx2) = second_slash else {
+        return Err(ClientError::RequestLineError(
+            RequestLineError::SlashParsing,
+        ));
+    };
+
+    if slash_idx2 > space_idx2 {
+        return Err(ClientError::RequestLineError(
+            RequestLineError::InvalidRange,
+        ));
+    }
+    let byte_slice = &target[slash_idx2..space_idx2];
+
+    Ok((byte_slice.len(), str::from_utf8(byte_slice)?))
 }
 fn parse_content_string() {
     todo!();
@@ -153,11 +185,11 @@ fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), Clien
 
         let response = "HTTP/1.1 200 OK\r\n\r\n";
         let response404 = "HTTP/1.1 404 Not Found\r\n\r\n";
-        let (len, str) = parse_content_len_and_string(target.clone().bytes());
+        let (len, str) = parse_content_len_and_string(&target)?;
 
         let response_echo = format!(
             "HTTP/1.1 200 Ok\r\nContent-Type: text/plain\r\nContent-Length: {:?}\r\n\r{:?}",
-            content_length, content_string
+            len, str
         );
 
         if str::from_utf8(&target.clone())? == "/" {
