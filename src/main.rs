@@ -7,8 +7,6 @@
 #![deny(unsafe_code)]
 use core::str::Utf8Error;
 use std::{
-    error::Error,
-    i32,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     string::FromUtf8Error,
@@ -18,7 +16,7 @@ use std::{
 fn main() {
     //println!("hello");
 
-    let hello = bind_port();
+    let _ = bind_port();
 }
 
 #[derive(Debug)]
@@ -116,7 +114,6 @@ fn parse_request_target(buf: &[u8]) -> Result<Vec<u8>, Utf8Error> {
     Ok(request_line.clone())
 }
 fn parse_content_len_and_string(target: &[u8]) -> Result<(usize, &str), ClientError> {
-    let first_space = target.iter().position(|&b| b == b' ');
     let first_slash = target.iter().position(|&b| b == b'/');
     /*
      *
@@ -127,45 +124,24 @@ fn parse_content_len_and_string(target: &[u8]) -> Result<(usize, &str), ClientEr
      *
      */
 
-    let Some(space_idx) = first_space else {
-        return Err(ClientError::RequestLineError(
-            RequestLineError::SpaceParsing,
-        ));
-    };
-
     let Some(slash_idx) = first_slash else {
         return Err(ClientError::RequestLineError(
             RequestLineError::SlashParsing,
         ));
     };
 
-    let second_space = target.iter().skip(space_idx).position(|&b| b == b' ');
+    let skip_to_slash = slash_idx + 1;
+    let second_slash = target.iter().skip(skip_to_slash).position(|&b| b == b'/');
 
-    let Some(space_idx2) = second_space else {
-        return Err(ClientError::RequestLineError(
-            RequestLineError::SpaceParsing,
-        ));
-    };
-
-    let second_slash = target.iter().skip(slash_idx).position(|&b| b == b'/');
-
-    let Some(slash_idx2) = second_slash else {
+    let Some(start_of_body_slash) = second_slash else {
         return Err(ClientError::RequestLineError(
             RequestLineError::SlashParsing,
         ));
     };
 
-    if slash_idx2 > space_idx2 {
-        return Err(ClientError::RequestLineError(
-            RequestLineError::InvalidRange,
-        ));
-    }
-    let byte_slice = &target[slash_idx2..space_idx2];
+    let byte_slice = &target[start_of_body_slash..];
 
     Ok((byte_slice.len(), str::from_utf8(byte_slice)?))
-}
-fn parse_content_string() {
-    todo!();
 }
 fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), ClientError> {
     let mut owned_stream = stream;
@@ -193,7 +169,10 @@ fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), Clien
         );
 
         if str::from_utf8(&target.clone())? == "/" {
+            //this is the case that you just find a slash, in that event we just return a 200
             owned_stream.write_all(response.as_bytes())?;
+            //
+            //
         } else if str::from_utf8(&target)?.starts_with("/echo/") {
             //good example of what you want to return here
             //HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc
@@ -228,8 +207,9 @@ fn bind_port() -> Result<(), std::io::Error> {
 
     Ok(())
 }
-
+#[cfg(test)]
 pub mod tests {
+    use crate::parse_content_len_and_string;
     use crate::parse_request_target;
 
     pub struct TestingBuf {
@@ -246,5 +226,20 @@ pub mod tests {
         assert_eq!(std::str::from_utf8(&target), Ok("/index.html"));
 
         Ok(())
+    }
+
+    #[test]
+    pub fn parse_content_unit_test() {
+        let path_vec = [
+            "/echo/abc",
+            "/echo/",
+            "/echo/hello-world",
+            "/",
+            "/index.html",
+        ];
+
+        for path in path_vec {
+            let _ = parse_content_len_and_string(path.as_bytes());
+        }
     }
 }
