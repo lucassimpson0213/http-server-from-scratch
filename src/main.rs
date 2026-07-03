@@ -1,6 +1,6 @@
 #![deny(clippy::all)]
 #![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
+// #![deny(clippy::expect_used)]
 #![deny(clippy::todo)]
 #![deny(clippy::unimplemented)]
 #![deny(clippy::dbg_macro)]
@@ -49,14 +49,12 @@ enum ClientError {
     TcpStreamRead(BufferError),
     Io,
     StringConversion,
-    RequestLineError(RequestLineError),
+    RequestStringError(RequestLineError),
 }
 
 #[derive(Debug)]
 enum RequestLineError {
-    SpaceParsing,
     SlashParsing,
-    InvalidRange,
 }
 
 fn is_get_request(buf: &[u8]) -> Result<bool, Utf8Error> {
@@ -114,7 +112,8 @@ fn parse_request_target(buf: &[u8]) -> Result<Vec<u8>, Utf8Error> {
     Ok(request_line.clone())
 }
 fn parse_content_len_and_string(target: &[u8]) -> Result<(usize, &str), ClientError> {
-    let first_slash = target.iter().position(|&b| b == b'/');
+    let slash = target.iter().position(|&b| b == b'/');
+
     /*
      *
      *  use let else instead of verbose match here
@@ -124,23 +123,20 @@ fn parse_content_len_and_string(target: &[u8]) -> Result<(usize, &str), ClientEr
      *
      */
 
-    let Some(slash_idx) = first_slash else {
-        return Err(ClientError::RequestLineError(
+    let Some(slash_idx) = slash else {
+        return Err(ClientError::RequestStringError(
             RequestLineError::SlashParsing,
         ));
     };
+    let second_slash = target[slash_idx + 1..].iter().position(|&b| b == b'/');
 
-    let skip_to_slash = slash_idx + 1;
-    let second_slash = target.iter().skip(skip_to_slash).position(|&b| b == b'/');
-
-    let Some(start_of_body_slash) = second_slash else {
-        return Err(ClientError::RequestLineError(
+    let Some(second_slash_idx) = second_slash else {
+        return Err(ClientError::RequestStringError(
             RequestLineError::SlashParsing,
         ));
     };
-
-    let byte_slice = &target[start_of_body_slash..];
-
+    println!("{}", second_slash_idx);
+    let byte_slice = &target[second_slash_idx + slash_idx + 2..];
     Ok((byte_slice.len(), str::from_utf8(byte_slice)?))
 }
 fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), ClientError> {
@@ -156,8 +152,10 @@ fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), Clien
         return Err(ClientError::TcpStreamRead(too_many_bytes_read));
     }
 
-    if is_get_request(&buf[..amt_bytes])? {
-        let target = parse_request_target(&buf)?;
+    let buf_within_range = &buf[..amt_bytes];
+
+    if is_get_request(buf_within_range)? {
+        let target = parse_request_target(buf_within_range)?;
 
         let response = "HTTP/1.1 200 OK\r\n\r\n";
         let response404 = "HTTP/1.1 404 Not Found\r\n\r\n";
@@ -209,12 +207,14 @@ fn bind_port() -> Result<(), std::io::Error> {
 }
 #[cfg(test)]
 pub mod tests {
+    use crate::ClientError;
     use crate::parse_content_len_and_string;
     use crate::parse_request_target;
 
     pub struct TestingBuf {
         request_line: &'static str,
     }
+
     #[test]
     pub fn return_request_line() -> Result<(), std::str::Utf8Error> {
         let test_struct = crate::tests::TestingBuf {
@@ -231,15 +231,32 @@ pub mod tests {
     #[test]
     pub fn parse_content_unit_test() {
         let path_vec = [
-            "/echo/abc",
-            "/echo/",
-            "/echo/hello-world",
-            "/",
-            "/index.html",
+            ("/echo/abc", Some((3_usize, "abc"))),
+            ("/echo/", Some((0_usize, ""))),
+            ("/echo/hello-world", Some((11_usize, "hello-world"))),
+            ("/echo/with spaces", Some((11_usize, "with spaces"))),
+            ("/echo/12345", Some((5_usize, "12345"))),
+            ("/echo/a", Some((1_usize, "a"))),
+            ("/echo/!", Some((1_usize, "!"))),
+            ("/echo/hello_world", Some((11_usize, "hello_world"))),
+            ("/echo/hello%20world", Some((13_usize, "hello%20world"))),
+            ("/echo/abc/def", Some((7_usize, "abc/def"))),
+            ("/echo//", Some((1_usize, "/"))),
+            ("/echo/🦀", Some((4_usize, "🦀"))),
+            ("/", None),
+            ("/index.html", None),
+            ("/echo", None),
+            ("/echoe/abc", None),
+            ("/Echo/abc", None),
+            ("/api/echo/abc", None),
+            ("echo/abc", None),
+            ("", None),
         ];
 
-        for path in path_vec {
-            let _ = parse_content_len_and_string(path.as_bytes());
+        for (path, expected) in path_vec {
+            let result = parse_content_len_and_string(path.as_bytes()).ok();
+
+            assert_eq!(Some(result), Some(expected));
         }
     }
 }
