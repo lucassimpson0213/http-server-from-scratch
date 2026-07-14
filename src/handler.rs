@@ -10,14 +10,26 @@ use std::io::Write;
 use std::net::TcpStream;
 
 mod handler {
+    use std::io::Read;
     use std::net::TcpStream;
-    struct Request {
+
+    use crate::errors::ClientError;
+    struct Request<'a> {
         amtbytes: usize,
         buffer: Vec<u8>,
+        request_target: &'a str,
     }
 
-    impl Request {
-        pub fn from_stream(stream: &TcpStream) {}
+    impl Request<'_> {
+        pub fn from_stream(&mut self, stream: TcpStream) -> Result<(), ClientError> {
+            let mut owned_stream = stream;
+            self.buffer = Vec::new();
+
+            let req = Request{}
+
+            self.amtbytes = owned_stream.read_to_end(&mut self.buffer)?;
+            Ok(())
+        }
     }
 
     struct Response {}
@@ -40,6 +52,7 @@ pub fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), C
     }
 
     let target = parse_request_target(&buf)?;
+    // this may be the boundary where we start making a request object
     let (len, str) = parse_content_len_and_string(&target)?;
     let (len, header) = parse_headers(&buf);
 
