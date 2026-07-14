@@ -30,8 +30,6 @@ fn bind_port() -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn parse_headers(target: &[u8]) {}
-
 #[cfg(test)]
 pub mod tests {
     use crate::errors::ClientError;

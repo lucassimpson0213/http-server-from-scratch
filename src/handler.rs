@@ -9,11 +9,24 @@ use std::io::Read;
 use std::io::Write;
 use std::net::TcpStream;
 
+mod handler {
+    use std::net::TcpStream;
+    struct Request {
+        amtbytes: usize,
+        buffer: Vec<u8>,
+    }
+
+    impl Request {
+        pub fn from_stream(stream: &TcpStream) {}
+    }
+
+    struct Response {}
+}
 pub fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), ClientError> {
     let mut owned_stream = stream;
-    let mut buf: Vec<u8> = vec![0u8; 16834];
+    let mut buf: Vec<u8> = Vec::new();
 
-    let amt_bytes = owned_stream.read(&mut buf)?;
+    let amt_bytes = owned_stream.read_to_end(&mut buf)?;
 
     debug_assert!(amt_bytes <= 16834);
 
@@ -22,15 +35,13 @@ pub fn handle_client(stream: TcpStream, _listener: &TcpListener) -> Result<(), C
         return Err(ClientError::TcpStreamRead(too_many_bytes_read));
     }
 
-    let buf_within_range = &buf[..amt_bytes];
-
-    if !is_get_request(buf_within_range)? {
+    if !is_get_request(&buf)? {
         return Err(ClientError::UnsupportedRequest);
     }
 
-    let target = parse_request_target(buf_within_range)?;
+    let target = parse_request_target(&buf)?;
     let (len, str) = parse_content_len_and_string(&target)?;
-    let (len, header) = parse_headers(buf_within_range);
+    let (len, header) = parse_headers(&buf);
 
     let response200 = "HTTP/1.1 200 OK\r\n\r\n";
     let response404 = "HTTP/1.1 404 Not Found\r\n\r\n";
